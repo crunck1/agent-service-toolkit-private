@@ -11,8 +11,9 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.graph.graph import CompiledGraph
 from langsmith import Client as LangsmithClient
+from fastapi.middleware.cors import CORSMiddleware
 
-from agent import research_assistant
+from agent import  qa_assistant_react
 from schema import ChatMessage, Feedback, UserInput, StreamInput
 
 
@@ -31,13 +32,20 @@ class TokenQueueStreamingHandler(AsyncCallbackHandler):
 async def lifespan(app: FastAPI):
     # Construct agent with Sqlite checkpointer
     async with AsyncSqliteSaver.from_conn_string("checkpoints.db") as saver:
-        research_assistant.checkpointer = saver
-        app.state.agent = research_assistant
+        qa_assistant_react.checkpointer = saver
+        app.state.agent = qa_assistant_react
         yield
     # context manager will clean up the AsyncSqliteSaver on exit
 
 
 app = FastAPI(lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Puoi specificare gli URL autorizzati invece di "*"
+    allow_credentials=True,
+    allow_methods=["*"],  # Consenti tutti i metodi (GET, POST, OPTIONS, ecc.)
+    allow_headers=["*"],  # Consenti tutti gli header
+)
 
 
 @app.middleware("http")
@@ -83,6 +91,15 @@ async def invoke(user_input: UserInput) -> ChatMessage:
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# Aggiungi il metodo OPTIONS per rispondere alle richieste preflight
+@app.options("/invoke")
+async def options_handler():
+    return {
+        "Allow": "OPTIONS, POST",
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "OPTIONS, POST",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    }
 
 async def message_generator(user_input: StreamInput) -> AsyncGenerator[str, None]:
     """

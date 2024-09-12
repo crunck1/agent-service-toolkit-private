@@ -1,3 +1,3 @@
-from agent.research_assistant import research_assistant
+from agent.qa_assistant_react import qa_assistant_react
 
-__all__ = ["research_assistant"]
+__all__ = ["qa_assistant_react"]

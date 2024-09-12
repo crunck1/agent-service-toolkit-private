@@ -2,7 +2,7 @@
     "python_version": "3.12",
     "dependencies": ["."],
     "graphs": {
-        "research_assistant": "./research_assistant.py:research_assistant"
+        "qa_assistant_react": "./qa_assistant_react.py:qa_assistant_react"
     },
     "env": "../.env"
 }
