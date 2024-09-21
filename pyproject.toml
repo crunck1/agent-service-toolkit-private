@@ -39,6 +39,10 @@ dependencies = [
     "setuptools ~=74.0.0",
     "streamlit ~=1.37.0",
     "uvicorn ~=0.30.5",
+    "bs4",
+    "langchain_huggingface",
+    "langchain_experimental",
+    "psycopg2-binary ~=2.9.9"
 ]
 
 [project.optional-dependencies]

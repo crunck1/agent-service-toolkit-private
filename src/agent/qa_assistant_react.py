@@ -10,10 +10,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, StateGraph, MessagesState
 from langgraph.managed import IsLastStep
 from langgraph.prebuilt import ToolNode
-from langchain_community.tools.tavily_search import TavilySearchResults
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
-from langgraph.prebuilt import create_react_agent
-from langchain_core.prompts import ChatPromptTemplate
 from langgraph.checkpoint.memory import MemorySaver
 from langchain_community.tools import BraveSearch
 from typing import List, Dict
@@ -26,7 +23,6 @@ from langchain.vectorstores import utils as chromautils
 from  langchain.schema import Document
 import json
 from typing import Iterable
-from langchain_text_splitters import  MarkdownTextSplitter
 from langchain_chroma import Chroma
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain.tools.retriever import create_retriever_tool
@@ -36,18 +32,10 @@ from langchain.schema import Document
 import psycopg2
 from langchain_community.utilities import  SQLDatabase
 from langchain_community.agent_toolkits.sql.toolkit import   SQLDatabaseToolkit
-from langchain.chains import create_sql_query_chain
-from langchain_experimental.sql import SQLDatabaseChain
 from langchain_core.tools import tool
-from langchain_core.prompts import PromptTemplate
-from langchain_core.tools import StructuredTool
-from langchain.prompts.prompt import PromptTemplate
-from langchain_community.agent_toolkits import create_sql_agent
-from langchain.agents.agent_types import AgentType
 from langchain import hub
 import asyncio
 from functools import partial
-from langchain_core.prompts import PromptTemplate
 import asyncio
 
 
@@ -340,23 +328,6 @@ def import_events_to_postgres(event_docs: List[Document], db_params: dict):
     conn.close()
 
 
-
-
-def save_all_events_to_file(event_documents: List[Document], output_file: str) -> None:
-    html_content = "<html><head><title>Eventi Estratti</title></head><body>"
-    html_content += "<h1>Eventi Estratti</h1>"
-
-    for doc in event_documents:
-        html_content += doc.page_content
-        html_content += "<hr>"
-
-    html_content += "</body></html>"
-
-    # Salvare il contenuto HTML in un file
-    with open(output_file, 'w', encoding='utf-8') as file:
-        file.write(html_content)
-
-import re
 async def process_and_extract_events(model, docs: List[Document]) -> List[Document]:
     event_documents = []
 
@@ -396,170 +367,7 @@ async def process_and_extract_events(model, docs: List[Document]) -> List[Docume
     return event_documents
     
 
-
-
 db = SQLDatabase.from_uri("postgresql://claudio:settanta9-a@postgres:5432/agentic")
-#llm = models["gpt-4o-mini"]  
-llm = ChatOpenAI(model="gpt-4o", temperature=0, streaming=True)
-    # Create the SQL query chain
-chain = create_sql_query_chain(llm, db)
-# Funzione sincrona per eseguire la query
-def events_run(query: str) -> str:
-   # print("faccio  events_run")
-    return chain.invoke({"question": query})
-
-# Funzione asincrona per eseguire la query
-async def aevents_run(query: str) -> str:
-    ms =  await chain.ainvoke({"question": query})
-   # print("msg")
-   # print(ms)
-    return query
-
-# Definire il tool per LangGraph
-scala_search_event = StructuredTool.from_function(
-    func=events_run,  # Funzione sincrona
-    coroutine=aevents_run,  # Funzione asincrona
-    name="scala_search_event",
-    description="Usa questo tool per trovare  le date di andata in scena degli spettacoli.",
-)
-
-
-current_date = datetime.now().strftime("%B %d, %Y")
-
-
-_DEFAULT_TEMPLATE = f""" Sei un esperto di PostgreSql.
-Data una domanda di input, prima crea una query PostgreSql sintatticamente corretta da eseguire.
-Controlla che la query sia coerente con la richiesta. Se non lo è formula un'altra query.
-Quindi guarda i risultati della query e restituisci la risposta alla domanda di input.
-A meno che l'utente non specifichi nella domanda un numero specifico di esempi da ottenere, esegui una query per al massimo 5 risultati utilizzando la clausola LIMIT come per SQLite. Puoi ordinare i risultati per restituire i dati più informativi nel database.
-Devi eseguire la query solo sulle colonne necessarie per rispondere alla domanda. Racchiudi ogni nome di colonna tra virgolette doppie (") per indicarli come identificatori delimitati.
-Fai attenzione a usare solo i nomi di colonna che puoi vedere nelle tabelle sottostanti. Fai attenzione a non cercare colonne che non esistono. Inoltre, fai attenzione a quale colonna si trova in quale tabella.
-Attenzione: non scrivere mai ```sql o altre stringhe diverse dalla query!
-Se nella richiesta c'è una data una quella data nella query
-
-Usa il seguente formato:
-
-
-Domanda: {input}
-Pensiero: analizza la richiesta, pensa a come trasformare la richiesta in date
-Azione: l'azione da intraprendere, devi eseguire la query sql
-SQLQuery: Query SQL da eseguire
-SQLResult: il risultato della query
-... (questo Pensiero/Azione/SQLQuery/SQLResult può essere ripetuto N volte)
-Pensiero: ora conosco la risposta finale
-Risposta: Risposta finale qui
-
-Usa solo le seguenti tabelle:
-
-CREATE TABLE eventi (
-    id INTEGER,
-    source TEXT,
-    event_date TEXT,
-    event_time TEXT,
-    event_title TEXT,
-    event_author TEXT,
-    content TEXT,
-    PRIMARY KEY (id)
-)
-
-
-"""
-
-PROMPT = PromptTemplate(
-    input_variables=["input", "table_info", "dialect"], template=_DEFAULT_TEMPLATE
-)
-### create_sql_agent
-
-
-
-toolkit = SQLDatabaseToolkit(db=db, llm=llm)
-
-
-
-template = '''Answer the following questions as best you can. You have access to the following tools:
-
-{tools}
-
-Use the following format:
-
-Question: the input question you must answer
-Thought: you should always think about what to do
-Action: the action to take, should be one of [{tool_names}]
-Action Input: the input to the action
-Observation: the result of the action
-... (this Thought/Action/Action Input/Observation can repeat N times)
-Thought: I now know the final answer
-Final Answer: the final answer to the original input question
-
-Begin!
-
-Question: {input}
-Thought:{agent_scratchpad}'''
-
-newprompt = PromptTemplate.from_template(template)
-scala_search_event_agent = create_sql_agent(
-    llm=llm,
-    toolkit=toolkit,
-    agent_type=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
-    verbose=True,
-    prompt=newprompt
-)
-# Funzione sincrona
-def events_run(query: str) -> str:
-    """
-    Tu sei un esperto analista SQL, crea la query corretta in base alla query fornita.     
-    """
-    #llm = models["gpt-4o-mini"]
-    llm = llm
-    db_chain = SQLDatabaseChain.from_llm(llm, db, verbose=True,  prompt=PROMPT, return_direct=True)
-    return  db_chain.invoke(query)  # Use arun instead of run
-
-
-# Funzione sincrona
-async def aevents_run(query: str) -> str:
-    """
-    Tu sei un esperto analista SQL, crea la query corretta in base alla query fornita.     
-    """
-    llm = models["gpt-4o-mini"] # Disable streaming
-    db_chain = SQLDatabaseChain.from_llm(llm, db, verbose=True,  prompt=PROMPT, return_direct=True)
-    
-    # Use partial to create a no-argument function for run_in_executor
-    func = partial(db_chain.invoke, query)
-    loop = asyncio.get_event_loop()
-    result = await loop.run_in_executor(None, func)
-    return result
-
-async def aevents_run_new(query: str) -> str:
-
-    return await scala_search_event_agent.ainvoke(query)
-
-# Creazione del tool StructuredTool
-scala_search_event = StructuredTool.from_function(
-    func=events_run,
-    coroutine=aevents_run,
-    name="scala_search_event",
-    description="""Se ti vengono richieste informazioni sulle date di andata in scena degli spettacoli  devi usare questo strumento!
-    usa lo strumento scala_search o web_search per informazioni sulle date di qualsiasi altra cosa""",
-) 
-
-
-
-
-
-
-
-descr = """
-"Usa questo strumento per cercare eventi nel calendario,lo schema è stato creato cosi:  CREATE TABLE IF NOT EXISTS eventi (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            source TEXT,
-            event_date TEXT,
-            event_time TEXT,
-            event_title TEXT,
-            event_author TEXT,
-            content TEXT
-        )
-"""
-
 docs = chromautils.filter_complex_metadata(docs)
 vectorstore = Chroma(
     persist_directory="./embeddings",  # Specifica la directory di caricamento
@@ -575,16 +383,6 @@ tool = create_retriever_tool(
    
    """,
 )  
-
-"""  Sei un'AI specializzata nell'assistere gli spettatori nella ricerca di informazioni sugli spettacoli.
-    Quando un utente chiede informazioni:
-        1) Riconosci termini come prima, recita, replica, stagione, cartellone, debutto, matinée, serale e rispondi in modo appropriato.
-        3) Includi dettagli sul teatro e il contesto della stagione.
-        4) Informa sull'artista, direttore e cast principale.
-        5) Se l'utente chiede "Quando è lo spettacolo a Milano?", chiedi chiarimenti (es. titolo, teatro).
-        6) Riconosci richieste su atti, ruoli o allestimenti storici, fornendo dettagli su intervalli o durata.
-    Usa questo strumento quando si parla di "prime", "recite", "repliche", "stagione", "cartellone", "debutto", "matinée", "serale".
-    Per le domande sulle date di andata in scena degli spettacoli devi usare lo strumento scala_search_event """
 
 event_docs = []
 # Funzione per processare i documenti e ottenere gli eventi
@@ -613,18 +411,16 @@ db_params = {
 }
 import_events_to_postgres(event_docs, db_params)
 
-""" 
-output_file_path = 'eventi_estratti.html'
-save_all_events_to_file(event_docs, output_file_path) 
-"""
 
-
+toolkit = SQLDatabaseToolkit(db=db, llm=models["gpt-4o-mini"])
 tools = [ tool, web_search, duck_search] + toolkit.get_tools()
 
 # Add weather tool if API key is set
 # Register for an API key at https://openweathermap.org/api/
 if os.getenv("OPENWEATHERMAP_API_KEY") is not None:
     tools.append(OpenWeatherMapQueryRun(name="Weather"))
+
+current_date = datetime.now().strftime("%B %d, %Y")
 
 instructions = f"""
 Sei un utile assistente di ricerca per il sito https://www.teatroallascala.org/ del teatro la scala
@@ -637,14 +433,14 @@ Nel caso ti vengano richieste informazioni sulle date di uno spettacolo:
 1) usa sempre lo strumento  "sql_db_schema", "sql_db_list_tables" e poi "sql_db_query" (nell'ordine) 
 2) Quando usi lo strumento "sql_db_query"  applica sempre un limite di 5 risultati a meno che non ti venga esplicitamente richiesto
 3) puoi fare al massimo 5 step 
-
+4) non cercare mai nel passato a meno che non ti venga esplicitamente richiesto.
 
 FORMATTARE SEMPRE LA RISPOSTA IN UN BLOCCO DIV DEL FORMATO HTML (senza immettere il testo ```html)
 
 L'utente ha 3 domande che non riguardano il teatro la scala o vivaticket. Alla quarta domanda rispondi che non puoi rispondere a questo tipo di domande
 che esulano dal servizio di assistenza spettacoli o biglietteria.
 
-NOTA: L'UTENTE  PUÒ VEDERE LA RISPOSTA DELLO STRUMENTO se richiesto
+NOTA: L'UTENTE NON PUÒ VEDERE LA RISPOSTA DELLO STRUMENTO se richiesto
 
 Lo strumento "BraveSearch" può fare ricerche unicamente sul dominio teatroallascala.org, vivaticket.com
 

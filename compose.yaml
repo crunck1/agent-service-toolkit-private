@@ -7,6 +7,14 @@ services:
       - "80:80"
     env_file:
       - .env
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=mydatabase
+      - POSTGRES_USER=myuser
+      - POSTGRES_PASSWORD=mypassword
+    depends_on:
+      - postgres
     develop:
       watch:
         - path: ./src/agent/
@@ -40,3 +48,17 @@ services:
         - path: streamlit_app.py
           action: sync+restart
           target: /app/streamlit_app.py
+
+  postgres:
+    image: postgres:14
+    environment:
+      POSTGRES_DB: agentic
+      POSTGRES_USER: claudio
+      POSTGRES_PASSWORD: settanta9-a
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
