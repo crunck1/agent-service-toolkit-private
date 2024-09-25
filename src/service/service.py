@@ -16,6 +16,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from agent import  qa_assistant_react
 from schema import ChatMessage, Feedback, UserInput, StreamInput
 
+# Inizializza un dizionario per memorizzare gli agenti
+agents: Dict[str, CompiledGraph] = {}
+
+from uuid import uuid4
+
+async def create_agent(config: Dict[str, Any]) -> str:
+    agent_id = str(uuid4())
+    # Crea un nuovo agente con la configurazione specificata
+    new_agent = await CompiledGraph.from_config(config)
+    agents[agent_id] = new_agent
+    return agent_id
+
 
 class TokenQueueStreamingHandler(AsyncCallbackHandler):
     """LangChain callback handler for streaming LLM tokens to an asyncio queue."""
@@ -183,3 +195,20 @@ async def feedback(feedback: Feedback):
         **kwargs,
     )
     return {"status": "success"}
+
+# Nuove rotte per la gestione degli agenti
+
+@app.post("/agents")
+async def create_agent_route(config: Dict[str, Any]) -> Dict[str, str]:
+    try:
+        agent_id = await create_agent(config)
+        return {"agent_id": agent_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/agents/{agent_id}")
+async def get_agent_route(agent_id: str) -> CompiledGraph:
+    agent = agents.get(agent_id)
+    if agent is None:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    return agent
