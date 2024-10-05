@@ -110,7 +110,8 @@ async def ask_model_for_selectors(model, document: Document):
                             'time_selector': 'testo di esempio',
                             'title_selector': 'testo di esempio',
                             'author_selector': 'testo di esempio'
-                          } Rispondi con json valido perchè lo userò poi in seguito.
+                          } Rispondi con json valido perchè lo userò poi in seguito. 
+                          Non inserire commenti o altro testo che non sia json.
                          """),
             AIMessage(content=document.page_content[:10000])
         ]

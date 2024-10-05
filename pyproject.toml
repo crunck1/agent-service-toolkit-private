@@ -42,7 +42,9 @@ dependencies = [
     "bs4",
     "langchain_huggingface",
     "langchain_experimental",
-    "psycopg2-binary ~=2.9.9"
+    "psycopg2-binary ~=2.9.9",
+    "dill",
+    "spider-client"
 ]
 
 [project.optional-dependencies]

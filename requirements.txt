@@ -27,3 +27,5 @@ bs4
 langchain_huggingface
 langchain_experimental
 psycopg2-binary~=2.9.9
+dill
+spider-client

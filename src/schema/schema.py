@@ -37,6 +37,10 @@ class StreamInput(UserInput):
         description="Whether to stream LLM tokens to the client.",
         default=True,
     )
+    id: str = Field(
+        description="The ID of the agent to use for streaming.",
+    )
+
 
 
 class AgentResponse(BaseModel):
