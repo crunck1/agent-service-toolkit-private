@@ -2,7 +2,7 @@ import asyncio
 from contextlib import asynccontextmanager
 import json
 import os
-from typing import AsyncGenerator, Dict, Any, Tuple
+from typing import AsyncGenerator, Dict, Any, Tuple, List
 from uuid import uuid4
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import StreamingResponse
@@ -20,32 +20,34 @@ from .AgentStoreManager import AgentStoreManager
 from .AgentConfigManager import AgentConfigManager
 import logging
 from fastapi.responses import JSONResponse
+from fastapi import File, UploadFile
+from langchain.document_loaders import PyPDFLoader, TextLoader
+from typing import Dict, Any, Optional
+from pydantic import BaseModel
+
+
 
 db_uri = f"postgresql://claudio:settanta9-a@postgres:5432/agentic"
 agent_store_manager = AgentStoreManager(db_uri=db_uri)
-agent_manager = AgentManager()
 agent_config_manager = AgentConfigManager(db_uri=db_uri)
 # Dizionario per tenere gli agenti in memoria
 agents_cache = {}
 
-async def create_agent(model_name="gpt-4o-mini", 
+async def create_agent(
+                       model_name="gpt-4o-mini", 
+                       id=None,
                        name=None,
-                       use_brave=True, 
-                       use_duckduckgo=True, 
-                       persist_directory=None, 
                        instructions=None,
                        site=None,
-                       create_calendar=True,
-                       db_uri=None, 
-                       db_params=None,
-                       create_docs=False) -> Tuple[str, CompiledGraph]:
+                       create_calendar=False,
+                       use_search_engines=False, 
+                       recreateSite=False,
+                       recreateFiles=False) -> Tuple[str, CompiledGraph]:
     """
     Crea un agente configurato con diversi strumenti e modelli.
 
     Args:
         model_name (str): Il nome del modello da utilizzare.
-        use_brave (bool): Se usare Brave come motore di ricerca.
-        use_duckduckgo (bool): Se usare DuckDuckGo come motore di ricerca.
         persist_directory (str): La directory per il retriever basato su embeddings.
         db_uri (str): URI del database SQL.
         db_params (dict): Parametri per la connessione PostgreSQL (opzionale).
@@ -55,27 +57,34 @@ async def create_agent(model_name="gpt-4o-mini",
         Tuple[str, CompiledGraph]: Un ID dell'agente e l'istanza dell'agente configurata.
     """
     # Inizializza l'agente
-    agent_manager = AgentManager(model_name=model_name)
+    agent_manager = AgentManager(id, model_name=model_name)
 
     agent_manager.add_name(name)
     
     # Aggiungi strumenti di ricerca
-    agent_manager.add_search_tools(use_brave=use_brave, use_duckduckgo=use_duckduckgo)
+    if use_search_engines:
+        agent_manager.add_search_tools()
 
-    # Configura il database SQL (se fornito)
-    if create_calendar:
-        agent_manager.configure_database(table_name=name)
-    
-    # Aggiungi il retriever solo se esiste già, senza creare documenti
-    if site and persist_directory:
-        agent_manager.add_persist_directory(persist_directory=persist_directory)
+    # Creo documenti del sito
+    if site and id:
+        agent_manager.configure_paths(persist_directory=id)
         agent_manager.add_site(site=site)
         # Aggiungi il retriever basato su embeddings
-        agent_manager.add_retriever(create_docs=create_docs)  # Non creare documenti
+        agent_manager.add_retriever(create_site_docs=recreateSite,create_files_docs=recreateFiles)
+        csvpath = agent_manager.find_event_csv() 
+        print("csvpath:")
+        print(csvpath)
+        ## se esiste un cvs eventi lo carico nel database per i tools
+        if csvpath:
+            agent_manager.load_events_from_csv(csvpath)
+            agent_manager.add_sql_tookit()
+            
 
     # Aggiungi istruzioni
     if instructions:
         agent_manager.add_instructions(instructions=instructions)
+    
+
 
     # Crea il calendario se necessario
     if create_calendar:
@@ -120,14 +129,14 @@ async def lifespan(app: FastAPI):
             id = agent_config["id"]
             agent = await create_agent(
                 model_name=agent_config["model_name"],
+                id=id,
                 name=agent_config["name"],
-                use_brave=agent_config["use_brave"],
-                use_duckduckgo=agent_config["use_duckduckgo"],
-                persist_directory=agent_config["persist_directory"],
                 instructions=agent_config["instructions"],
                 site=agent_config["site"],
-                create_calendar=False,  # Non creare calendari al momento del caricamento
-                create_docs=False  # Carica solo gli embeddings esistenti
+                create_calendar=agent_config["create_calendar"],
+                use_search_engines=agent_config["use_search_engines"],
+                recreateSite=False,  # non creare i documenti al momento del caricamento  in app devono esserci già
+                recreateFiles=False  # non creare i documenti al momento del caricamento devono esserci già
             )
             # Aggiungi l'agente nella cache
             agents_cache[id] = agent
@@ -276,31 +285,6 @@ async def stream_agent(user_input: StreamInput):
 
 
 
-""" @app.on_event("startup")
-async def startup_event():
-    print("parte startup event")
-    all_agent_configs = agent_config_manager.load_all_agent_configs()
-
-    # Ricrea ogni agente
-    for agent_config in all_agent_configs:
-        print("agent config")
-        print(agent_config)
-        agent_id = agent_config["agent_id"]
-        agent = await create_agent(
-            model_name=agent_config["model_name"],
-            name=agent_config["name"],
-            use_brave=agent_config["use_brave"],
-            use_duckduckgo=agent_config["use_duckduckgo"],
-            persist_directory=agent_config["persist_directory"],
-            instructions=agent_config["instructions"],
-            site=agent_config["site"],
-            create_calendar=agent_config["create_calendar"]
-        )
-
-        # Salva l'agente nel dizionario degli agenti attivi
-        agents_cache[agent_id] = agent
- """
-
 # Endpoint di esempio per verificare gli agenti caricati
 @app.get("/agents")
 async def get_agents():
@@ -317,63 +301,33 @@ async def feedback(feedback: Feedback):
         **kwargs,
     )
     return {"status": "success"}
-""" 
-@app.post("/agents")
-async def create_agent_route(config: Dict[str, Any]) -> Dict[str, str]:
-    try:
-        agent_id, agent = create_agent(
-            model_name=config.get("model_name", "gpt-4o-mini"),
-            name=config.get("name", "esempio"),
-            use_brave=config.get("use_brave", True),
-            use_duckduckgo=config.get("use_duckduckgo", True),
-            persist_directory=config.get("persist_directory", "./embeddings"),
-            site=config.get("site", None),
-            db_uri=config.get("db_uri"),
-            db_params=config.get("db_params"),
-            create_calendar=config.get("create_calendar")
 
-        )
-        
-
-        # Salva l'agente nel database
-        agent_store_manager.save_agent(agent_id, agent)  # Presumendo che save_agent accetti agent_id e agent
-
-        return {"agent_id": agent_id}
-    
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
- """
-
-""" @app.get("/agents/{agent_id}")
-async def get_agent_route(agent_id: str) -> CompiledGraph:
-    agent = agents.get(agent_id)
-    if agent is None:
-        raise HTTPException(status_code=404, detail="Agent not found")
-    return agent
- """
-
-from fastapi import Query
-
+class AgentConfig(BaseModel):
+    agent_id: int
+    recreateFiles: Optional[bool] = False
+    recreateSite: Optional[bool] = False
 
 # Route per creare una nuova configurazione di agente
-@app.post("/agents/create/{id}")
-async def create_agent_config(id: int) -> Dict[str, Any]:
-    print(f"id {id}")
+@app.post("/agents/create")
+async def create_agent_config(aconfig: AgentConfig):
+    print(f"id {aconfig.agent_id}")
+    id = aconfig.agent_id
     try:
+        # Ottieni il valore dalla configurazione
         config = agent_config_manager.load_agent_config(id)  # Esempio: carica l'agente con ID 1
-
+        print(config)
 
         # Poi genero tutto l'agente compreso documenti e tabella eventi
         agent = await create_agent(
             model_name=config.get("model_name", "gpt-4o-mini"),
-            name=config.get("name", "esempio"),
-            use_brave=config.get("use_brave", True),
-            use_duckduckgo=config.get("use_duckduckgo", True),
-            persist_directory=config.get("persist_directory"),
+            id=id,
+            name=config.get("name"),
             instructions=config.get("instructions", ""),
             site=config.get("site"),
-            create_calendar=config.get("create_calendar"),
-            create_docs=config.get("create_docs"),
+            create_calendar=config.get("create_calendar", False),
+            use_search_engines=config.get("use_search_engines", False),
+            recreateSite=aconfig.recreateSite,
+            recreateFiles=aconfig.recreateFiles
             )
         print("finita creazione agent")
         agent_config_manager.close()
@@ -391,7 +345,7 @@ async def create_agent_calendar(config: Dict[str, Any]) -> Dict[str, Any]:
     
     try:
         agent_manager.add_name(config.get("name"))
-        agent_manager.add_persist_directory(config.get("persist_directory"))
+        agent_manager.configure_paths(config.get("persist_directory"))
         await agent_manager.add_calendar()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

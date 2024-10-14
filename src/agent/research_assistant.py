@@ -15,6 +15,8 @@ from agent.tools import calculator
 from agent.llama_guard import LlamaGuard, LlamaGuardOutput, SafetyAssessment
 
 
+
+
 class AgentState(MessagesState):
     safety: LlamaGuardOutput
     is_last_step: IsLastStep
@@ -25,6 +27,7 @@ class AgentState(MessagesState):
 models = {
     "gpt-4o-mini": ChatOpenAI(model="gpt-4o-mini", temperature=0.5, streaming=True),
 }
+
 
 if os.getenv("GROQ_API_KEY") is not None:
     models["llama-3.1-70b"] = ChatGroq(model="llama-3.1-70b-versatile", temperature=0.5)

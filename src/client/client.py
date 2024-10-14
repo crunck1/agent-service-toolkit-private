@@ -179,7 +179,7 @@ class AgentClient:
         Returns:
             AsyncGenerator[ChatMessage | str, None]: The response from the agent
         """
-        request = StreamInput(message=message, stream_tokens=stream_tokens, id=29)
+        request = StreamInput(message=message, stream_tokens=stream_tokens, id=11)
         if thread_id:
             request.thread_id = thread_id
         if model:

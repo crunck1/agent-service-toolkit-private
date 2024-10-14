@@ -140,6 +140,8 @@ class EventExtractor:
             selectors = await self.ask_model_for_selectors(doc)
             print(f"selettori css trovati:")
             print(selectors)
+            if selectors is None or '':
+                continue
             
             # Estrarre eventi usando i selettori
             events = self.extract_events_with_selectors(doc.page_content, selectors)

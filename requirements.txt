@@ -29,3 +29,8 @@ langchain_experimental
 psycopg2-binary~=2.9.9
 dill
 spider-client
+faiss-cpu
+pypdf
+python-multipart
+googlesearch-python
+langchain-ollama
