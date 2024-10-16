@@ -16,7 +16,6 @@ services:
       - POSTGRES_DB=mydatabase
       - POSTGRES_USER=myuser
       - POSTGRES_PASSWORD=mypassword
-      - OLLAMA_HOST=http://airoomer.com:11434
     depends_on:
       - postgres
     develop:
@@ -65,17 +64,6 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    networks:
-      - service_network
-
-  ollama:
-    image: ollama/ollama
-    ports:
-      - "11434:11434"
-    volumes:
-      - /usr/share/ollama/.ollama/models:/root/.ollama/models  # Volume persistente per i modelli
-    environment:
-      - OLLAMA_MODEL_DIR=/root/.ollama/models  # Imposta la directory dei modelli
     networks:
       - service_network
     

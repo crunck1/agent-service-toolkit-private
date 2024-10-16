@@ -56,24 +56,16 @@ from .GoogleSearchTool import GoogleSearchTool
 
 from pydantic import BaseModel
 from langchain_core.tools import StructuredTool
-from langchain_ollama import ChatOllama
-
-
-
 
 
 import logging
 logging.basicConfig(filename='errori.log', level=logging.ERROR)
 
 
-""" models = {
-    "gpt-4o-mini": ChatOpenAI(model="gpt-4o-mini", temperature=0.5, streaming=True),
-} """
-
-ollama_model = ChatOllama(model="llama3.1:8b")
 models = {
-    "gpt-4o-mini": ollama_model,
-}
+    "gpt-4o-mini": ChatOpenAI(model="gpt-4o-mini", temperature=0.5, streaming=True),
+} 
+
 class AgentState(MessagesState):
     safety: LlamaGuardOutput
     is_last_step: IsLastStep
@@ -209,9 +201,9 @@ class AgentManager:
             self.add_tool(brave_search)
 
 
-        duck_search = DuckDuckGoSearchResults(
+        """ duck_search = DuckDuckGoSearchResults(
             name="DuckDuckGoSearch", region="it-it", max_results=20)
-        self.add_tool(duck_search)
+        self.add_tool(duck_search) """
 
         # Definiamo il tool per Langchain
         def search_tool(query):
@@ -242,7 +234,8 @@ class AgentManager:
         """Aggiunge un sistema di recupero basato su embeddings."""
         print("Aggiungo retriever")
 
-        if create_site_docs:
+        # creo i site docs solo se ho il site
+        if create_site_docs and self.site:
             self._create_and_store_site_docs()
         if create_files_docs:
             self._add_file_docs_to_vectorstore()
@@ -387,9 +380,11 @@ class AgentManager:
         print(f"Configuro database")
         # Usa SQLite con un file locale
         db_uri = f"sqlite:///{self.original_persist_directory}.db"
+        print(f"db_uri = {db_uri}")
         database = SQLDatabase.from_uri(db_uri)
         toolkit = SQLDatabaseToolkit(db=database, llm=self.model)
         self.tools += toolkit.get_tools()
+        print(toolkit.get_tools())
         self.hasSqlToolkit = True
 
     def import_events_to_sqlite(self, csv_path):
