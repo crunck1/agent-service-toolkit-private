@@ -4,7 +4,7 @@ import logging
 import dill
 
 
-logging.basicConfig(filename='errori.log', level=logging.ERROR)
+logging.basicConfig(filename='agent.log', level=logging.INFO)
 
 class AgentStoreManager:
     def __init__(self, db_uri):
@@ -40,7 +40,7 @@ class AgentStoreManager:
             ''', (agent_id, psycopg2.Binary(agent_serialized)))
             self.conn.commit()
             cursor.close()
-            print(f"Agente {agent_id} salvato con successo.")
+            logging.info(f"Agente {agent_id} salvato con successo.")
         except Exception as e:
             logging.error("Errore durante il salvataggio dell'agente su PostgreSQL", exc_info=True)
             raise
@@ -57,10 +57,10 @@ class AgentStoreManager:
                 agent_serialized = row[0]
                 # Deserializza l'agente
                 agent = dill.loads(agent_serialized)
-                print(f"Agente {agent_id} caricato con successo.")
+                logging.info(f"Agente {agent_id} caricato con successo.")
                 return agent
             else:
-                print(f"Agente {agent_id} non trovato.")
+                logging.info(f"Agente {agent_id} non trovato.")
                 return None
         except Exception as e:
             logging.error("Errore durante il caricamento dell'agente da PostgreSQL", exc_info=True)

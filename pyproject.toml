@@ -49,8 +49,8 @@ dependencies = [
     "pypdf",
     "python-multipart",
     "googlesearch-python",
-    "langchain-ollama"
-]
+    "langchain-ollama",
+    ]
 
 [project.optional-dependencies]
 dev = [

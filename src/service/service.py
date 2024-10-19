@@ -2,6 +2,7 @@ import asyncio
 from contextlib import asynccontextmanager
 import json
 import os
+import logging
 from typing import AsyncGenerator, Dict, Any, Tuple, List
 from uuid import uuid4
 from fastapi import FastAPI, HTTPException, Request, Response
@@ -24,6 +25,7 @@ from fastapi import File, UploadFile
 from langchain.document_loaders import PyPDFLoader, TextLoader
 from typing import Dict, Any, Optional
 from pydantic import BaseModel
+logging.basicConfig(filename='agent.log', level=logging.INFO)
 
 
 
@@ -58,42 +60,44 @@ async def create_agent(
     """
     # Inizializza l'agente
     agent_manager = AgentManager(id, model_name=model_name)
-
+    #nome dell'agente
     agent_manager.add_name(name)
-    
+    #configurazione varie paths
+    agent_manager.configure_paths(persist_directory=id) 
     # Aggiungi strumenti di ricerca
     if use_search_engines:
         agent_manager.add_search_tools()
-
-    # Creo documenti del sito
-    if site and id:
-        agent_manager.configure_paths(persist_directory=id)
+    
+    if site:
         agent_manager.add_site(site=site)
-        # Aggiungi il retriever basato su embeddings
-        agent_manager.add_retriever(create_site_docs=recreateSite,create_files_docs=recreateFiles)
-        csvpath = agent_manager.find_event_csv() 
-        print("csvpath:")
-        print(csvpath)
-        ## se esiste un cvs eventi lo carico nel database per i tools
-        if csvpath:
-            agent_manager.load_events_from_csv(csvpath)
-            agent_manager.add_sql_tookit()
+    # Aggiungi il retriever basato su embeddings
+    agent_manager.add_retriever(create_site_docs=recreateSite,create_files_docs=recreateFiles)
+    csvpath = agent_manager.find_event_csv() 
+    logging.info("csvpath:")
+    logging.info(csvpath)
+    ## se esiste un cvs eventi lo carico nel database per i tools
+    if csvpath:
+        agent_manager.load_events_from_csv(csvpath)
+        agent_manager.add_sql_tookit()
             
 
     # Aggiungi istruzioni
     if instructions:
+        logging.info("service.py aggiungo istruzioni")
         agent_manager.add_instructions(instructions=instructions)
+    else:
+        logging.info("service.py  istruzioni non presenti")
     
 
 
     # Crea il calendario se necessario
     if create_calendar:
-        print("Creo il calendario")
+        logging.info("Creo il calendario")
         await agent_manager.add_calendar()
 
     # Crea l'agente
     agent = agent_manager.create_agent()
-    print("Agente creato correttamente")
+    logging.info("Agente creato correttamente")
     
     return agent
 
@@ -116,12 +120,12 @@ async def lifespan(app: FastAPI):
 
     try:
         global agents_cache
-        print("Avvio del ciclo di vita (lifespan): caricamento degli agenti")
+        logging.info("Avvio del ciclo di vita (lifespan): caricamento degli agenti")
 
         # Carica tutte le configurazioni degli agenti
         all_agent_configs = agent_config_manager.load_all_agent_configs()
-        print("all_agent_configs")
-        print(all_agent_configs)
+        logging.info("all_agent_configs")
+        logging.info(all_agent_configs)
         agent_config_manager.close()
 
         # Ricrea ogni agente
@@ -141,8 +145,8 @@ async def lifespan(app: FastAPI):
             # Aggiungi l'agente nella cache
             agents_cache[id] = agent
 
-        print("Agenti caricati correttamente:")
-        print(agents_cache)
+        logging.info("Agenti caricati correttamente:")
+        logging.info(agents_cache)
 
         # Assegna il checkpointer agli agenti (se necessario)
         """for agent_id, agent in agents_cache.items():
@@ -224,8 +228,8 @@ async def options_handler():
 async def message_generator(user_input: StreamInput) -> AsyncGenerator[str, None]:
     # Ottieni l'agente in base all'ID
     agent: CompiledGraph = agents_cache.get(int(user_input.id))
-    print("agent")
-    print(agent)
+    logging.info("agent")
+    logging.info(agent)
     if agent is None:
         yield f"data: {json.dumps({'type': 'error', 'content': 'Agent not found'})}\n\n"
         return
@@ -238,13 +242,13 @@ async def message_generator(user_input: StreamInput) -> AsyncGenerator[str, None
 
     async def run_agent_stream():
         async for s in agent.astream(**kwargs, stream_mode="updates"):
-            print("faccio output queu")
+            logging.info("faccio output queu")
             await output_queue.put(s)
         await output_queue.put(None)
 
-    print("prima asyncio.create_task")
+    logging.info("prima asyncio.create_task")
     stream_task = asyncio.create_task(run_agent_stream())
-    print("dopo asyncio.create_task")
+    logging.info("dopo asyncio.create_task")
 
     while s := await output_queue.get():
         if isinstance(s, str):
@@ -257,7 +261,7 @@ async def message_generator(user_input: StreamInput) -> AsyncGenerator[str, None
             if "messages" in state:
                 new_messages.extend(state["messages"])
         for message in new_messages:
-            print(message)
+            logging.info(message)
             try:
                 chat_message = ChatMessage.from_langchain(message)
                 chat_message.run_id = str(run_id)
@@ -275,8 +279,8 @@ async def message_generator(user_input: StreamInput) -> AsyncGenerator[str, None
 
 @app.post("/stream")
 async def stream_agent(user_input: StreamInput):
-    print("agent cache")
-    print(agents_cache)
+    logging.info("agent cache")
+    logging.info(agents_cache)
     agent = agents_cache.get(int(user_input.id))
     if agent is None:
         raise HTTPException(status_code=404, detail=f"stream endpoint, Agent not found, richiesta:{user_input.id}")
@@ -310,12 +314,14 @@ class AgentConfig(BaseModel):
 # Route per creare una nuova configurazione di agente
 @app.post("/agents/create")
 async def create_agent_config(aconfig: AgentConfig):
-    print(f"id {aconfig.agent_id}")
+    logging.info(f"id {aconfig.agent_id}")
+    logging.info("aconfig")
+    logging.info(aconfig)
     id = aconfig.agent_id
     try:
         # Ottieni il valore dalla configurazione
         config = agent_config_manager.load_agent_config(id)  # Esempio: carica l'agente con ID 1
-        print(config)
+        logging.info(config)
 
         # Poi genero tutto l'agente compreso documenti e tabella eventi
         agent = await create_agent(
@@ -329,7 +335,7 @@ async def create_agent_config(aconfig: AgentConfig):
             recreateSite=aconfig.recreateSite,
             recreateFiles=aconfig.recreateFiles
             )
-        print("finita creazione agent")
+        logging.info("finita creazione agent")
         agent_config_manager.close()
 
         agents_cache[id] = agent
@@ -350,3 +356,14 @@ async def create_agent_calendar(config: Dict[str, Any]) -> Dict[str, Any]:
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     return {"agent_name": config.get("name"), "message": "Calendario salvato con successo"}
+
+
+# Route DELETE per eliminare un agente
+@app.delete("/agents/{agent_id}", response_model=dict)
+def delete_agent(agent_id: int):
+    try:
+        agent_manager = AgentManager(agent_id)
+        agent_manager.delete()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    return {"agent_name": agent_id, "message": "agente cancellato con successo"}

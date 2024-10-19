@@ -9,7 +9,7 @@ from langchain_community.agent_toolkits.sql.toolkit import   SQLDatabaseToolkit
 from datetime import datetime
 from langchain_core.messages import AIMessage, SystemMessage
 import logging,os
-logging.basicConfig(filename='errori.log', level=logging.DEBUG)
+logging.basicConfig(filename='agent.log', level=logging.INFO)
 
 
 class EventExtractor:
@@ -29,34 +29,34 @@ class EventExtractor:
     def filter_calendario_docs(docs: List[Document]) -> List[Document]:
         """Filtra i documenti che contengono la parola 'calendario'."""
         filtered_docs = []
-        print(f"sono in filter_calendario_docs, len= {len(docs)}")
+        logging.info(f"sono in filter_calendario_docs, len= {len(docs)}")
         logging.warning(f"sono in filter_calendario_docs, len= {len(docs)}")
-        print("Current working directory:", os.getcwd())
+        logging.info(f"Current working directory: {os.getcwd()}")
         
 
         for doc in docs:
             try:
                 # Controlla il tipo di oggetto
                 if not isinstance(doc, Document):
-                    print(f"Elemento non di tipo Document: {doc}")
+                    logging.info(f"Elemento non di tipo Document: {doc}")
                     continue
                 
                 # Controlla se 'metadata' e 'source' sono presenti
                 pathname = doc.metadata.get("pathname", "")
-                print(doc.metadata)
+                logging.info(doc.metadata)
                 if pathname is None or '':
-                    print(f"Metadata mancante per il documento: {doc}")
+                    logging.info(f"Metadata mancante per il documento: {doc}")
                     continue
                 
                 # Logga il valore di 'source' per il debugging
-                print(f"Verificando il documento con source: '{pathname}'")
+                logging.info(f"Verificando il documento con source: '{pathname}'")
 
                 # Verifica se 'calendario' è presente
                 if "calendario" in pathname.lower():
                     filtered_docs.append(doc)
 
             except Exception as e:
-                print(f"Errore durante l'elaborazione del documento: {e}", exc_info=True)
+                logging.info(f"Errore durante l'elaborazione del documento: {e}", exc_info=True)
 
         return filtered_docs
 
@@ -69,13 +69,13 @@ class EventExtractor:
         if json_match:
             json_text = json_match.group(1)
             try:
-                print(json_text)
+                logging.info(json_text)
                 return json.loads(json_text)
             except json.JSONDecodeError:
-                print("Errore nella decodifica del JSON")
+                logging.info("Errore nella decodifica del JSON")
                 return None
         else:
-            print("Nessun JSON trovato nella risposta")
+            logging.info("Nessun JSON trovato nella risposta")
             return None
     
     async def ask_model_for_selectors(self, document: Document):
@@ -123,7 +123,7 @@ class EventExtractor:
                 }
                 extracted_events.append(extracted_event)
             except:
-                print("Errore nel trovare evento")
+                logging.info("Errore nel trovare evento")
         return extracted_events
 
     @staticmethod
@@ -138,8 +138,8 @@ class EventExtractor:
         for doc in docs:
             # Ottenere i selettori dal modello
             selectors = await self.ask_model_for_selectors(doc)
-            print(f"selettori css trovati:")
-            print(selectors)
+            logging.info(f"selettori css trovati:")
+            logging.info(selectors)
             if selectors is None or '':
                 continue
             
@@ -176,7 +176,7 @@ class EventExtractor:
     async def create_event_docs(self, docs: List[Document]):
         """Processa i documenti filtrando per calendario ed estrae gli eventi."""
         calendario_docs = self.filter_calendario_docs(docs)
-        print(f"numero calendario docs:  {len(calendario_docs)}")
+        logging.info(f"numero calendario docs:  {len(calendario_docs)}")
         return await self.process_and_extract_events_md(calendario_docs)
     
     import re
@@ -209,7 +209,7 @@ class EventExtractor:
     
     def import_events_to_postgres(self, event_docs: List[Document]):
         # Connessione al database PostgreSQL
-        print(f"importo su postrger num: {len(event_docs)}")
+        logging.info(f"importo su postrger num: {len(event_docs)}")
         conn = psycopg2.connect(self.db_uri)
         cursor = conn.cursor()
 
@@ -263,6 +263,6 @@ class EventExtractor:
     async def run(self, docs: List[Document]):
         """Esegue il processo di estrazione e importazione nel database."""
         event_docs = await self.create_event_docs(docs)
-        print("eventi trovati da create_event_docs")
-        print(event_docs)
+        logging.info("eventi trovati da create_event_docs")
+        logging.info(event_docs)
         self.import_events_to_postgres(event_docs)

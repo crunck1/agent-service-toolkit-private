@@ -1,5 +1,6 @@
 import psycopg2
 import logging
+logging.basicConfig(filename='agent.log', level=logging.INFO)
 
 
 class AgentConfigManager:
@@ -62,14 +63,14 @@ class AgentConfigManager:
         """Carica tutte le configurazioni degli agenti dal database."""
         self.connect()  # Assicurati di connetterti prima di eseguire operazioni
         try:
-            print("Faccio load_all_config")
+            logging.info("Faccio load_all_config")
             with self.conn.cursor() as cursor:
                 cursor.execute('SELECT * FROM agent_streams')
                 agents = cursor.fetchall()
 
             loaded_agents = []
             for agent in agents:
-                id, name,  site, model_name, create_calendar,  instructions, use_search_engines, created_at, updated_at = agent
+                id, name,  site, model_name, use_search_engines, create_calendar,  instructions,  created_at, updated_at = agent
                 agent_data = {
                     "id": id,
                     "model_name": model_name,
@@ -92,19 +93,19 @@ class AgentConfigManager:
         """Carica la configurazione di un singolo agente dal database usando l'agent_id."""
         self.connect()  # Assicurati di connetterti prima di eseguire operazioni
         try:
-            print(f"Carico la configurazione per l'agente con ID {agent_id}")
+            logging.info(f"Carico la configurazione per l'agente con ID {agent_id}")
             with self.conn.cursor() as cursor:
                 cursor.execute(
                     'SELECT * FROM agent_streams WHERE id = %s', (agent_id,))
                 agent = cursor.fetchone()
 
-            print("agent")
-            print(agent)
+            logging.info("agent")
+            logging.info(agent)
             if agent is None:
                 raise ValueError(f"Nessun agente trovato con ID {agent_id}")
 
             # Destrutturazione dei valori recuperati dalla query
-            id, name,  site, model_name,  create_calendar,  instructions, use_search_engine, created_at, updated_at = agent
+            id, name,  site, model_name, use_search_engine, create_calendar,  instructions,  created_at, updated_at = agent
 
             # Crea un dizionario con i dati dell'agente
             agent_data = {
@@ -127,7 +128,7 @@ class AgentConfigManager:
         """Carica i files di un singolo agente dal database usando l'agent_id."""
         self.connect()  # Assicurati di connetterti prima di eseguire operazioni
         try:
-            print(f"Carico i files per l'agente con ID {agent_id}")
+            logging.info(f"Carico i files per l'agente con ID {agent_id}")
             with self.conn.cursor() as cursor:
                 cursor.execute(
                     'SELECT * FROM agent_stream_files WHERE agent_stream_id = %s', (agent_id,))
@@ -147,7 +148,6 @@ class AgentConfigManager:
                     'updated_at': updated_at
                 })
 
-            print("Files recuperati:", all_files)
             return all_files
 
         except Exception as e:

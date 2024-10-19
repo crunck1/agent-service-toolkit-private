@@ -1,4 +1,7 @@
 from googlesearch import search
+import logging
+logging.basicConfig(filename='agent.log', level=logging.INFO)
+
 
 class GoogleSearchTool:
     def __init__(self):
@@ -19,5 +22,5 @@ class GoogleSearchTool:
         try:
             results = list(search(query, num_results=num_results, advanced=True))
         except Exception as e:
-            print(f"Errore durante la ricerca: {e}")
+            logging.info(f"Errore durante la ricerca: {e}")
         return results
